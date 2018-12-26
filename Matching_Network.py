@@ -1,7 +1,7 @@
 import tensorflow as tf
-from keras.layers import Conv2D, MaxPool2D, BatchNormalization, Activation
 
 rnn = tf.nn.rnn_cell
+slim = tf.contrib.slim
 
 class MatchingNet(object):
 
@@ -13,7 +13,6 @@ class MatchingNet(object):
 
         #The task is then to classifty a disjoint batch of
         #unlabelled examples into one of thess N classed.
-
 
         self.img_size = 28
         self.batch_size = batch_size
@@ -34,24 +33,15 @@ class MatchingNet(object):
         #non-linearity and 2 × 2 max-pooling. We resized all the images to 28 × 28 so that, when we stack 4
         #modules, the resulting feature map is 1 × 1 × 64, resulting in our embedding function f(x).
 
-        net = Conv2D(64, 3, strides=(1, 1), padding='same', activation='relu')(inputs)
-        net = BatchNormalization()(net)
-        net = MaxPool2D(pool_size=(2, 2), strides=(2, 2), padding='same')(net)
-
-        net = BatchNormalization()(net)
-        net = Activation(activation='relu')(net)
-        net = Conv2D(64, 3, strides=(1, 1), padding='same')(net)
-        net = MaxPool2D(pool_size=(2, 2), strides=(2, 2), padding='same')(net)
-
-        net = BatchNormalization()(net)
-        net = Activation(activation='relu')(net)
-        net = Conv2D(64, 3, strides=(1, 1), padding='same')(net)
-        net = MaxPool2D(pool_size=(2, 2), strides=(2, 2), padding='same')(net)
-
-        net = BatchNormalization()(net)
-        net = Activation(activation='relu')(net)
-        net = Conv2D(64, 3, strides=(1, 1), padding='same')(net)
-        net = MaxPool2D(pool_size=(2, 2), strides=(2, 2), padding='same')(net)
+        with slim.arg_scope([slim.conv2d], num_outputs=64, kernel_size=3, normalizer_fn=slim.batch_norm):
+            net = slim.conv2d(inputs)
+            net = slim.max_pool2d(net, [2, 2])
+            net = slim.conv2d(net)
+            net = slim.max_pool2d(net, [2, 2])
+            net = slim.conv2d(net)
+            net = slim.max_pool2d(net, [2, 2])
+            net = slim.conv2d(net)
+            net = slim.max_pool2d(net, [2, 2])
 
         return tf.reshape(net, [-1, 1*1*64])
 
@@ -110,6 +100,7 @@ class MatchingNet(object):
         gc_embedding = self.fce_g(support_set_encode) #(n*k, batch_size, 64)
 
         example_set_encode = self.encode(self.example_set) #(batch_size, 64)
+
         if self.usefce:
             fc_embedding = self.fce_f(example_set_encode, gc_embedding) #(batch_size, 64)
         else:
@@ -119,11 +110,11 @@ class MatchingNet(object):
         attention = tf.nn.softmax(similarity)
         logits = tf.matmul(tf.expand_dims(attention, 1), tf.one_hot(self.support_set_label, self.N_way))
         predict = tf.argmax(logits, 1)
+        print(logits)
 
         return tf.squeeze(logits, 1), predict #(batch, N_class * k_shot)
 
     def train(self, logits, label):
         loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits())
-
 
 MatchingNet(N_way=10, k_shot=1).build()
